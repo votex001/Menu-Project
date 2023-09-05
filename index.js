@@ -1,137 +1,260 @@
-import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
-import { menuData } from './data.js';
-const OrderBtn = document.getElementById("order-btn")
-const finalPr = document.getElementById('final-price')
-const ordersThings = document.getElementById('orders-things')
-finalPr.innerHTML = 0
+const searchForm = document.getElementById("search")
+const searchInput = document.getElementById("search-input")
+const LS = localStorage
+let content = Array(0)
+let module = Array(0)
+export const key = "198a7499";
 
-// for adding items to order checking uuid of item
-document.addEventListener('click', function(e){
-    if(e.target.dataset.add){
-        orderMath(e.target.dataset.add)
-    }
+
+
+
+
+
+// check if we have something in watclist and pushing this items to module
+if(LS.key('data')){
+  JSON.parse(LS.data).map(x=>module.push(x))
+}
+
+// if clicked on "add to watchlist" adding things to localstorage.data
+document.addEventListener("click", e=>{
+  if(e.target.dataset.watch){
     
+    module.push(e.target.dataset.watch)
+    const makeUniq = (arr) => {const uniqSet = new Set(arr);return uniqSet;}
+   LS.setItem('data',JSON.stringify(Array.from(makeUniq(module))))
+    
+  }
 })
 
 
-// final summ of all order
-function orderMath(orderId){
-    const orderObj = menuData.filter(function(order){
-return orderId === order.uuid
-    })[0]
-    finalPr.innerText= +finalPr.textContent + orderObj.price
-    
-    ordersThings.innerHTML += `
-    <div class="format-order">
-    <p id="order-name">${orderObj.name}</p>
-    <p id="order-price">${orderObj.price}$</p>
-    </div>`
 
+//1) asking search input about value, and if value more then 3 simbols going to fetch function
 
+if(searchForm){
+searchForm.addEventListener("submit",e=>{
+  e.preventDefault()
 
-    render()
+  if(searchInput.value.length > 2){ 
+    content = Array(0)
+    getSearch(searchInput.value)
+  }
+
+})
 }
 
 
 
-// menu rendering
-function getFeedHtml(){
-    let feedhtml = ''
+//2) fending fetch with input value to get total result information and to send it to next etap
+async function getSearch(input){
+  const res = await fetch(`https://www.omdbapi.com/?apikey=${key}&s=${input}`)
+  const data = await res.json()
+  if(data.Response === "True"){
+    getListofId(data.totalResults,input)
+  }
+  else if (data.Response === "False"){
+    if(data.Error === 'Request limit reached!'){
+    console.log(data) 
+    document.getElementById("movies-cantainer").innerHTML = `<div class="empty">
+    <p>It's beta and i have only 1000 reasuts-per day limit...</p>
+    <img src="Photos/Oops_.svg">`}
+  else{
+    console.log(data) 
+    document.getElementById("movies-cantainer").innerHTML = `<div class="empty">
+    <p>Try something else...</p>
+    <img src="Photos/Oops_.svg">`
+  }
+  }
 
+}
+// 3) getting all results in one search and sending all id to next function
 
-    menuData.forEach(function(menu){
-        feedhtml += `<div class="menu">
-        <div class="menu-inner">
-            <img src="${menu.productPic}" class="profile-pic">
-                <div class="product-info">
-                    <div class="splitter">
-                        <div>
-                            <h2 class="name">${menu.name}</h2>
-                            <p class="ingredients">${menu.ingredients}</p>
-                        </div>
-                        <div class="add">
-                            <p class="plus" data-add="${menu.uuid}">+</p>
-                        </div>
-                    </div>
-                    <div class="product-price">
-                        <h5>${menu.price}$</h5>
-                        
-                    </div>
-                    
-                </div>
+function getListofId(numRes,input){
+  if(numRes > 50){
+    numRes = 50
+  }
+      let num = Array.from(Array(Math.ceil(numRes/10)).keys()).map(x=> x+1)
+      num.forEach(x=> {
+        fetch(`https://www.omdbapi.com/?apikey=${key}&s=${input}&page=${x}`)
+        .then(res=> res.json())
+        .then(data => {
+          
+data.Search.map(x=> {
+  if(x.Poster != "N/A"){
+    getSearchArr(x.imdbID)
+  }
+})
+        })
+      })
+
+}
+// 4) rendering all
+
+async function getSearchArr(id){
+  const res = await fetch(`https://www.omdbapi.com/?apikey=${key}&i=${id}`)
+  const data = await res.json()
+  const { Response,Plot,Runtime,Poster,Title,imdbRating,Genre} = data;
+  if(Response === "True" & Plot !== "N/A" & Runtime !== "N/A"){
+  if(Plot.length > 169){
+    content.push(`
+    <div class="card">
+        <div class="movie">
+        <div class="img">
+            <img src=${Poster} class="poster" onerror="this.onerror=null; this.src='Photos/error.jpg'"/>
         </div>
-    </div>`
-    })
-    return feedhtml
+    
+            <div class="content ">
+                <div class="flex title-container">
+                    <h2 class="title">${Title}</h1> 
+                    <p><img src="Photos/star.svg">${imdbRating}</p>
+                </div>
+
+                <div class="flex info">
+                    <div class="flex">
+                      <p>${Runtime}</p> 
+                      <p>${Genre}</p>
+                    </div> 
+                    <button data-watch=${id}><img src="Photos/Icon.svg"> Watchlist</button>
+                </div>
+                
+                <div class="plot">
+                    <p>${Plot.slice(0,169)}<span style="display: none;" id="${id}">${Plot.slice(169)}</span> <a onclick="openMore('${id}', '${id.slice(0,5)}')" id="${id.slice(0,5)}">Read more...</a></p>
+                </div>
+            </div>
+        </div>
+    </div>`)
+ 
 }
-// little render procces
-function render(){
-document.getElementById("our-menu").innerHTML = getFeedHtml()
-}
-render()
 
-//if ill click "complete order" button opens window with card info inputs
-
-document.getElementById('order-btn').addEventListener('click',function(){
-    if(finalPr.innerHTML != 0){
-    document.getElementById('card-input').innerHTML =` 
-    <div id="order-details">
-    <p id="close-window">X</p>
-    <h2 class="card-dialog">Enter card details</h2>
-    <input placeholder="Enter your name">
-    <input placeholder="Enter card number">
-    <input placeholder="Enter CVV">
-    </div>`
-}
-})
-
-// close card info by clicking 'X'
-
-document.addEventListener('click',function(e){
-    if(e.target.id === 'close-window'){
-        document.getElementById('card-input').innerHTML = ''
-    }
-})
-
-
-
-
-
-{/*       <div class="menu">
-                    <div class="menu-inner">
-                        <img src="photo/humburger.jpg" class="profile-pic">
-                            <div class="product-info">
-                                <div class="lets">
-                                    <div >
-                                        <h2 class="name">Humburger</h2>
-                                        <p class="ingredients">beef,cheese,lettuce</p>
-                                    </div>
-                                    <div class="add">
-                                        <p class="plus">+</p>
-                                    </div>
-                                </div>
-                                <div class="product-price">
-                                    <h5 data-price="43242342356453">4$</h5>
-                                    
-                                </div>
-                                
-                            </div>
-                    </div>
-                </div> */}
-
-
-            //   <div class="format-order">
-            //     <p id="order-name">sfaasf</p>
-            //     <p id="order-price">12</p>
-            //   </div>
+  else{
+    content.push(`
+    
+    <div class="card">
+    <div class="movie">
+      <div class="img">
+        <img src=${Poster} class="poster" onerror="this.onerror=null; this.src='Photos/error.jpg'"/>
+      </div>
+  
+        <div class="content ">
+            <div class="flex title-container">
+                <h2 class="title">${Title}</h1> <p><img src="Photos/star.svg">${imdbRating}</p>
+            </div>
             
+            <div class="flex info">
+                <div class="flex">
+                    <p>${Runtime}</p> 
+                    <p>${Genre}</p> 
+                </div>
+                <button data-watch=${id}><img src="Photos/Icon.svg"> Watchlist</button>
+            </div>
+
+            <div class="plot">
+                <p>${Plot}</p>
+            </div>
+        </div>
+    </div>
+    </div>`)
+  }}
+document.getElementById("movies-cantainer").innerHTML = content.join('')
+start()
+}
 
 
 
-        //     <div id="order-details">
-        //     <p class="close-window">X</p>
-        //     <h2 class="card-dialog">Enter card details</h2>
-        //     <input placeholder="Enter your name">
-        //     <input placeholder="Enter card number">
-        //     <input placeholder="Enter CVV">
-        // </div>
+
+
+// pagination
+
+function getPageList(totalPages, page, maxLength){
+  function range(start, end){
+    return Array.from(Array(end - start + 1), (_, i) => i + start);
+  }
+
+  var sideWidth = maxLength < 9 ? 1 : 2;
+  var leftWidth = (maxLength - sideWidth * 2 - 3) >> 1;
+  var rightWidth = (maxLength - sideWidth * 2 - 3) >> 1;
+
+  if(totalPages <= maxLength){
+    return range(1, totalPages);
+  }
+
+  if(page <= maxLength - sideWidth - 1 - rightWidth){
+    return range(1, maxLength - sideWidth - 1).concat(0, range(totalPages - sideWidth + 1, totalPages));
+  }
+
+  if(page >= totalPages - sideWidth - 1 - rightWidth){
+    return range(1, sideWidth).concat(0, range(totalPages- sideWidth - 1 - rightWidth - leftWidth, totalPages));
+  }
+
+  return range(1, sideWidth).concat(0, range(page - leftWidth, page + rightWidth), 0, range(totalPages - sideWidth + 1, totalPages));
+}
+
+export function start(){
+  var numberOfItems =  $(".card-content .card").length;
+  var limitPerPage = 6; //How many card items visible per a page
+  var totalPages = Math.ceil(numberOfItems / limitPerPage);
+  var paginationSize = 7; //How many page elements visible in the pagination
+  var currentPage;
+  function showPage(whichPage){
+    if(whichPage < 1 || whichPage > totalPages) return false;
+    currentPage = whichPage;
+
+    $(".card-content .card").hide().slice((currentPage - 1) * limitPerPage, currentPage * limitPerPage).show();
+
+    $(".pagination li").slice(1, -1).remove();
+
+    getPageList(totalPages, currentPage, paginationSize).forEach(item => {
+      $("<li>").addClass("page-item").addClass(item ? "current-page" : "dots")
+      .toggleClass("active", item === currentPage).append($("<a>").addClass("page-link")
+      .attr({href: "javascript:void(0)"}).text(item || "...")).insertBefore(".next-page");
+    });
+
+    $(".previous-page").toggleClass("disable", currentPage === 1);
+    $(".next-page").toggleClass("disable", currentPage === totalPages);
+    return true;
+  }
+
+  $(".pagination").append(
+    $("<li>").addClass("page-item").addClass("previous-page").append($("<a>").addClass("page-link").attr({href: "javascript:void(0)"}).text("Prev")),
+    $("<li>").addClass("page-item").addClass("next-page").append($("<a>").addClass("page-link").attr({href: "javascript:void(0)"}).text("Next"))
+  );
+
+  $(".card-content").show();
+  showPage(1);
+
+  $(document).on("click", ".pagination li.current-page:not(.active)", function(){
+    return showPage(+$(this).text());
+  });
+
+  $(".next-page").on("click", function(){
+    return showPage(currentPage + 1);
+  });
+
+  $(".previous-page").on("click", function(){
+    return showPage(currentPage - 1);
+  });
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
